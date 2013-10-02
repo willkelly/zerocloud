@@ -6,6 +6,7 @@ import socket
 from eventlet.green import select, subprocess
 from eventlet import GreenPool, listen, sleep, Timeout
 from tempfile import mkstemp
+import time
 from swift.common.utils import mkdirs
 
 REPORT_LENGTH = 5
@@ -50,24 +51,20 @@ class ZerovmExecutor:
         self.proc.terminate()
         self.rc = rc
         try:
-            self.communicate()
+            self._communicate()
         except (Exception, Timeout):
             self.proc.kill()
             self.rc = 3
-            self.get_final_status()
-        try:
-            os.unlink(self.manifest)
-        except IOError:
-            pass
+            self._get_final_status()
         return '%d\n%s' % (self.rc, self.stdout_data)
 
-    def communicate(self):
+    def _communicate(self):
         with Timeout(self.zerovm_timeout):
             while len(self.readable) > 0:
-                self.read_from_std(self.readable)
-                if self.output_overflow():
+                self._read_from_std(self.readable)
+                if self._output_overflow():
                     break
-            self.get_final_status()
+            self._get_final_status()
 
     def run(self):
         self.proc = subprocess.Popen(self.command_line,
@@ -76,24 +73,20 @@ class ZerovmExecutor:
 
         self.readable = [self.proc.stdout, self.proc.stderr]
         try:
-            self.communicate()
-            try:
-                os.unlink(self.manifest)
-            except IOError:
-                pass
+            self._communicate()
         except (Exception, Timeout):
             self.stop(STATUS_TIMEOUT)
 
-    def output_overflow(self):
+    def _output_overflow(self):
         if len(self.stdout_data) > self.zerovm_stdout_size \
-            or len(self.stderr_data) > self.zerovm_stderr_size:
+                or len(self.stderr_data) > self.zerovm_stderr_size:
             self.proc.kill()
             self.proc = None
             self.rc = STATUS_OVERFLOW
             return True
         return False
 
-    def get_final_status(self):
+    def _get_final_status(self):
         if not self.proc:
             return None
         (stdout_data, stderr_data) = self.proc.communicate()
@@ -105,9 +98,13 @@ class ZerovmExecutor:
                 return_code = STATUS_ERROR
             self.rc = return_code
         self.proc = None
-        self.update_stats(stdout_data)
+        self._update_stats(stdout_data)
+        try:
+            os.unlink(self.manifest)
+        except IOError:
+            pass
 
-    def read_from_std(self, readable):
+    def _read_from_std(self, readable):
         rlist, _junk, __junk = \
             select.select(readable, [], [], self.zerovm_timeout)
         if rlist:
@@ -118,11 +115,11 @@ class ZerovmExecutor:
                     continue
                 if stream == self.proc.stdout:
                     self.stdout_data += data
-                    self.update_stats(data)
+                    self._update_stats(data)
                 elif stream == self.proc.stderr:
                     self.stderr_data += data
 
-    def update_stats(self, data):
+    def _update_stats(self, data):
         self.lines.extend(data.splitlines())
         start = (len(self.lines) / REPORT_LENGTH - 1) * REPORT_LENGTH
         if start >= 0:
@@ -163,7 +160,9 @@ class ZerovmDaemon:
         executor = ZerovmExecutor(cmdline, zerovm_inputmnfst_fn, job_id,
                                   node_id, stats_file, timeout=zerovm_timeout)
         self.jobs.add(executor)
+        start = time.time()
         executor.run()
+        print "Executor finished in %f sec" % (time.time() - start)
         self.jobs.remove(executor)
         return executor
 
@@ -302,6 +301,7 @@ class ZerovmDaemon:
         return '%s 0 %s' % (job_id, JOB_NOT_FOUND)
 
     def handle(self, fd):
+        start = time.time()
         keyword, data = self.parse_command(fd)
         if not keyword or not data:
             self.send_response(fd, 'ERROR', '0\n%s\n' % data)
@@ -312,6 +312,7 @@ class ZerovmDaemon:
         else:
             status = UNKNOWN_COMMAND
         self.send_response(fd, keyword, status)
+        print "Handling finished in %f sec" % (time.time() - start)
 
     def serve(self):
         try:

@@ -4,7 +4,15 @@ import time
 import sys
 
 server_address = '/tmp/daemon_socket'
-data = 'Timeout = 5\n'
+data = '''Version = 20130611
+Program = /media/40G/zerovm-samples/hello/hello.nexe
+Timeout = 5
+Memory = 4294967295, 0
+NameServer = udp:127.0.0.1:54321
+Channel = /dev/null, /dev/stdin, 0, 0, 999999, 999999, 0, 0
+Channel = /dev/null, /dev/stdout, 0, 0, 0, 0, 999999, 999999
+Channel = /dev/null, /dev/stderr, 0, 0, 0, 0, 999999, 999999
+'''
 job_id = None
 node_id = None
 if len(sys.argv) > 2:
