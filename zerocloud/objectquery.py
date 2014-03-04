@@ -752,6 +752,8 @@ class ObjectQueryMiddleware(object):
                 perf = "%.3f" % (time.time() - start)
                 if self.zerovm_perf:
                     self.logger.info("PERF SPAWN: %s" % perf)
+                self.logger.error("WILK: zap_server_time: %s" % int(float(perf) * 1000))
+                self.logger.timing("zap_server_time", int(float(perf) * 1000))
                 self._debug_after_exec(debug_dir, nexe_headers, zerovm_retcode, zerovm_stderr, zerovm_stdout)
                 if nvram_file:
                     try:
@@ -784,6 +786,35 @@ class ObjectQueryMiddleware(object):
                     return req.get_response(resp)
 
                 self.logger.info('Zerovm CDR: %s' % nexe_headers['x-nexe-cdr-line'])
+                try:
+                    stats = nexe_headers['x-nexe-cdr-line'].split(" ")
+                    # the first item is transfer time, which is already logged
+                    # the next three are timers.
+                    # the subsequent items are counters.
+                    timers = stats[0:2]
+                    counters = stats[2:]
+                    timer_names = ["zap_system_time",
+                                   "zap_user_time"]
+                    counter_names = ["zap_memory_used",
+                                     "zap_swap_used",
+                                     "zap_reads_from_disk",
+                                     "zap_bytes_read_from_disk",
+                                     "zap_writes_to_disk",
+                                     "zap_bytes_written_to_disk",
+                                     "zap_reads_from_network",
+                                     "zap_bytes_read_from_network",
+                                     "zap_writes_to_network",
+                                     "zap_bytes_written_to_network"]
+                    for name, value in zip(timer_names, timers):
+                        self.logger.error("WILK: %s: %s" % (name, int(float(value.strip(",")) * 1000)))
+                        self.logger.timing(name,
+                                           int(float(value.strip(",")) * 1000))
+                    for name, value in zip(counter_names, counters):
+                        self.logger.error("WILK: %s: %s" % (name, int(value.strip(","))))
+                        self.logger.update_stats(name, int(value.strip(",")))
+                except:
+                    # never fail on statsd things
+                    pass
 
                 response = Response(request=req)
                 update_headers(response, nexe_headers)
