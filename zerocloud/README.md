@@ -14,3 +14,6 @@ The following new statsd metrics will be generated.
 
 - zap_transfer_time = the amount of time it took to transfer the zap
   to the object-server node which houses the object used as input.
+
+- zap_failed_execution = the number of zaps that returned a non-zero,
+  non-one exit code.

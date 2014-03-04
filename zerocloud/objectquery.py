@@ -780,6 +780,7 @@ class ObjectQueryMiddleware(object):
                 if zerovm_retcode > 1 or len(report) < REPORT_LENGTH:
                     resp = self._create_exec_error(nexe_headers, zerovm_retcode, zerovm_stdout)
                     _channel_cleanup(response_channels)
+                    self.logger.increment("zap_failed_execution")
                     return req.get_response(resp)
 
                 self.logger.info('Zerovm CDR: %s' % nexe_headers['x-nexe-cdr-line'])
