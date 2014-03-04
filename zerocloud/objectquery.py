@@ -189,7 +189,7 @@ class ObjectQueryMiddleware(object):
             self.logger = logger
         else:
             self.logger = get_logger(conf, log_route='obj-query')
-
+        self.logger.set_statsd_prefix("obj-query")
         # path to zerovm executable, better use absolute path here for security reasons
         self.zerovm_exename = [i.strip() for i in conf.get('zerovm_exename', 'zerovm').split() if i.strip()]
         # timeout for zerovm between TERM signal and KILL signal
@@ -947,6 +947,8 @@ class ObjectQueryMiddleware(object):
                                         ' %(path)s '), {'method': req.method, 'path': req.path})
                 res = HTTPInternalServerError(body=traceback.format_exc())
         trans_time = time.time() - start_time
+        self.logger.timing("zap_transfer_time", trans_time * 1000)
+
         if 'x-nexe-cdr-line' in res.headers:
             res.headers['x-nexe-cdr-line'] = '%.3f, %s' % (trans_time, res.headers['x-nexe-cdr-line'])
         if self.app.log_requests:
